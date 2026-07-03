@@ -25,13 +25,13 @@ const VOICES = [
 const DEFAULT_VOICE = "Sohee";
 
 const DEFAULT_INSTRUCTIONS = [
-  "You are a friendly voice assistant with a visible, human-like 3D avatar — the user",
+  "You are a friendly voice assistant with a visible, human-like 3D avatar: the user",
   "sees you as a person on their screen. This is a spoken conversation: keep replies",
   "short, natural and warm, never list-like.",
   "You can control your avatar body with tools: set_mood changes your overall emotional",
   "state, make_hand_gesture plays a hand gesture, make_facial_expression makes a quick",
   "facial expression from a single face emoji. Use them naturally and sparingly to",
-  "express yourself — smile when greeting, shrug when unsure, thumbs up when agreeing.",
+  "express yourself: smile when greeting, shrug when unsure, thumbs up when agreeing.",
   "Never mention the tools or that you are controlling an avatar.",
 ].join(" ");
 
@@ -164,14 +164,14 @@ const CAPTIONS = {
   idle: "TAP TO TALK",
   "creating-session": "REQUESTING A SLOT…",
   queued: "WAITING IN LINE…",
-  "your-turn": "YOUR TURN — TAP TO JOIN",
+  "your-turn": "YOUR TURN, TAP TO JOIN",
   connecting: "CONNECTING…",
   connected: "GO AHEAD, I'M LISTENING",
   "user-speaking": "LISTENING",
   processing: "THINKING…",
   "ai-speaking": "SPEAKING",
   closed: "TAP TO TALK",
-  error: "SOMETHING BROKE — TAP TO RETRY",
+  error: "SOMETHING BROKE, TAP TO RETRY",
 };
 
 /** @param {string} status */
@@ -244,7 +244,7 @@ async function startSession() {
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
     } catch {
-      setCaption("MIC BLOCKED — ALLOW IT IN THE BROWSER AND RETRY", "error");
+      setCaption("MIC BLOCKED, ALLOW IT IN THE BROWSER AND RETRY", "error");
       return;
     }
   }
@@ -299,14 +299,14 @@ async function startSession() {
   } catch (err) {
     const code = /** @type {Error & {code?: string}} */ (err)?.code;
     if (code === "limit") {
-      setCaption("DAILY CONVERSATION LIMIT REACHED — TRY AGAIN TOMORROW", "error");
+      setCaption("DAILY CONVERSATION LIMIT REACHED, TRY AGAIN TOMORROW", "error");
     } else if (code === "queue-full") {
-      setCaption("EVERY SEAT IS TAKEN — TRY AGAIN SHORTLY", "error");
+      setCaption("EVERY SEAT IS TAKEN, TRY AGAIN SHORTLY", "error");
     } else if (code === "join-expired") {
-      setCaption("YOUR SPOT EXPIRED — TAP TO TRY AGAIN", "error");
+      setCaption("YOUR SPOT EXPIRED, TAP TO TRY AGAIN", "error");
     } else if (code !== "aborted") {
       console.error(err);
-      setCaption("COULD NOT CONNECT — TAP TO RETRY", "error");
+      setCaption("COULD NOT CONNECT, TAP TO RETRY", "error");
     }
     await endSession(true);
     return;
