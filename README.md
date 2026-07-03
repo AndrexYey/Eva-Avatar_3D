@@ -7,6 +7,10 @@ sdk: docker
 app_port: 7860
 pinned: false
 short_description: Talk to Gemma 4 face to face, with a 3D lip-synced avatar
+models:
+  - google/gemma-4-31B-it
+  - nvidia/parakeet-tdt-1.1b
+  - Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice
 ---
 
 # Gemma Avatar
