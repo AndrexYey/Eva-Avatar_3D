@@ -39,6 +39,7 @@ const STORAGE_KEYS = {
   voice: "avatar.voice",
   instructions: "avatar.instructions",
   directUrl: "avatar.directUrl",
+  subtitles: "avatar.subtitles",
 };
 
 /** Function tools declared to the backend: the model plays the avatar. */
@@ -95,6 +96,7 @@ const settingsDialog = /** @type {HTMLDialogElement} */ ($("#settings"));
 const inputVoice = /** @type {HTMLSelectElement} */ ($("#voice"));
 const inputInstructions = /** @type {HTMLTextAreaElement} */ ($("#instructions"));
 const inputDirectUrl = /** @type {HTMLInputElement} */ ($("#direct-url"));
+const inputSubtitles = /** @type {HTMLInputElement} */ ($("#subtitles-toggle"));
 const directUrlRow = $("#direct-url-row");
 
 // ── State ────────────────────────────────────────────────────────────────
@@ -111,6 +113,8 @@ function loadSettings() {
     voice: localStorage.getItem(STORAGE_KEYS.voice) || DEFAULT_VOICE,
     instructions: localStorage.getItem(STORAGE_KEYS.instructions) || "",
     directUrl: localStorage.getItem(STORAGE_KEYS.directUrl) || "",
+    // Off by default: the face already carries the conversation.
+    subtitles: localStorage.getItem(STORAGE_KEYS.subtitles) === "1",
   };
 }
 let settings = loadSettings();
@@ -119,6 +123,7 @@ function saveSettings() {
   localStorage.setItem(STORAGE_KEYS.voice, settings.voice);
   localStorage.setItem(STORAGE_KEYS.instructions, settings.instructions);
   localStorage.setItem(STORAGE_KEYS.directUrl, settings.directUrl);
+  localStorage.setItem(STORAGE_KEYS.subtitles, settings.subtitles ? "1" : "0");
 }
 
 /** Persona + whatever extra guidance the user typed in Settings. */
@@ -136,6 +141,7 @@ function setCaption(text, kind = "") {
 
 /** @param {string} text */
 function showSubtitles(text) {
+  if (!settings.subtitles) return;
   clearTimeout(subtitleTimer);
   subtitles.textContent = text;
   subtitles.classList.add("visible");
@@ -347,6 +353,7 @@ settingsBtn.addEventListener("click", () => {
   inputVoice.value = settings.voice;
   inputInstructions.value = settings.instructions;
   inputDirectUrl.value = settings.directUrl;
+  inputSubtitles.checked = settings.subtitles;
   settingsDialog.showModal();
 });
 
@@ -355,8 +362,10 @@ settingsDialog.addEventListener("close", () => {
     voice: inputVoice.value || DEFAULT_VOICE,
     instructions: inputInstructions.value,
     directUrl: inputDirectUrl.value.trim(),
+    subtitles: inputSubtitles.checked,
   };
   saveSettings();
+  if (!settings.subtitles) subtitles.classList.remove("visible");
   // Voice/instructions apply live to an ongoing session.
   client?.updateSession({ voice: settings.voice, instructions: effectiveInstructions() });
 });

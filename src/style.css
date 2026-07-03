@@ -302,6 +302,19 @@ body {
   resize: vertical;
 }
 
+#settings .check-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+#settings .check-row input {
+  display: inline-block;
+  width: auto;
+  margin: 0;
+  accent-color: var(--text);
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
