@@ -1,0 +1,346 @@
+/*
+ * Design language carried over from the source Space (see its DESIGN.md):
+ * a precise cool-grey dark canvas, monochrome chrome, hairlines not boxes,
+ * Inter for humans and Geist Mono for the machine voice. One difference:
+ * there, color belonged to the orb — here, presence belongs to the avatar,
+ * so the chrome stays even quieter.
+ */
+
+:root {
+  --bg: #0a0b10;
+  --bg-elev: #13151c;
+  --bg-elev-2: #1b1e29;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #f5f6fa;
+  --text-dim: rgba(245, 246, 250, 0.65);
+  --text-faint: rgba(245, 246, 250, 0.42);
+  --error: #ff6a75;
+  --live: #22d3ee;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+}
+
+#app {
+  position: relative;
+  height: 100dvh;
+}
+
+/* ── The stage ──────────────────────────────────────────────────────── */
+
+#stage {
+  position: absolute;
+  inset: 0;
+}
+
+/* TalkingHead sizes the canvas itself (inline styles from its resize
+   observer) — don't fight it, just keep it block-level. */
+#stage canvas {
+  display: block;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+#loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg);
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+}
+
+#loading.done {
+  opacity: 0;
+}
+
+/* ── Topbar ─────────────────────────────────────────────────────────── */
+
+#topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 18px 20px;
+  pointer-events: none;
+}
+
+#topbar > * {
+  pointer-events: auto;
+}
+
+#identity h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+#identity p {
+  margin: 4px 0 0;
+  max-width: 340px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+#identity strong {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────── */
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.icon-btn:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.icon-btn.active {
+  color: var(--error);
+  border-color: var(--border-strong);
+}
+
+#main-btn {
+  min-width: 190px;
+  height: 46px;
+  padding: 0 26px;
+  border: none;
+  border-radius: 23px;
+  background: var(--text);
+  color: var(--bg);
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.12s ease, opacity 0.15s ease;
+}
+
+#main-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+#main-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+#main-btn.live {
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+}
+
+/* ── Controls / caption ─────────────────────────────────────────────── */
+
+#controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 0 20px calc(22px + env(safe-area-inset-bottom));
+}
+
+#buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#caption {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  transition: color 0.2s ease;
+}
+
+#caption.live {
+  color: var(--live);
+}
+
+#caption.error {
+  color: var(--error);
+}
+
+/* ── Subtitles ──────────────────────────────────────────────────────── */
+
+#subtitles {
+  position: absolute;
+  left: 50%;
+  bottom: 118px;
+  transform: translateX(-50%);
+  max-width: min(640px, calc(100vw - 48px));
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background: rgba(10, 11, 16, 0.72);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: balance;
+  color: var(--text);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+#subtitles.visible {
+  opacity: 1;
+}
+
+/* ── Settings dialog ────────────────────────────────────────────────── */
+
+#settings {
+  width: min(440px, calc(100vw - 40px));
+  padding: 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.32);
+}
+
+#settings::backdrop {
+  background: rgba(5, 6, 9, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+#settings h2 {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+#settings label {
+  display: block;
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+#settings select,
+#settings textarea,
+#settings input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+#settings select:focus-visible,
+#settings textarea:focus-visible,
+#settings input:focus-visible {
+  outline: 1px solid var(--text-dim);
+  outline-offset: 1px;
+}
+
+#settings textarea {
+  resize: vertical;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.dialog-actions .primary {
+  padding: 9px 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ── Focus + motion floors ──────────────────────────────────────────── */
+
+button:focus-visible {
+  outline: 2px solid var(--text-dim);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Phones ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  #identity p {
+    display: none;
+  }
+
+  #subtitles {
+    bottom: 128px;
+    font-size: 14px;
+  }
+}
