@@ -6,7 +6,7 @@ colorTo: purple
 sdk: docker
 app_port: 7860
 pinned: false
-thumbnail: https://huggingface.co/spaces/victor/gemma-avatar/resolve/main/thumbnail.png
+thumbnail: https://huggingface.co/spaces/victor/gemma-avatar/resolve/main/thumbnail.webp
 short_description: Talk to Gemma 4 face to face, with a 3D lip-synced avatar
 models:
   - google/gemma-4-31B-it
