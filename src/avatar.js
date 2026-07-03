@@ -64,8 +64,14 @@ export class AvatarStage {
     this.head = new TalkingHead(this._container, {
       ttsEndpoint: "N/A", // never used: speech comes from the s2s backend
       lipsyncModules: [], // never used: HeadAudio drives the visemes
+      // Framing tuned by hand: close-up head-and-shoulders with ~7% headroom,
+      // face centered (cameraX compensates the idle pose's slight lean). The
+      // vertical FOV makes this framing hold across aspect ratios, so the same
+      // values work for desktop and phones.
       cameraView: "upper",
-      cameraDistance: -0.7,
+      cameraDistance: -1.4,
+      cameraY: -0.15,
+      cameraX: -0.18,
       cameraRotateEnable: false,
       lightAmbientIntensity: 0,
       lightDirectIntensity: 0,

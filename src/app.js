@@ -22,7 +22,7 @@ const VOICES = [
   "Uncle_Fu",
   "Vivian",
 ];
-const DEFAULT_VOICE = "Aiden";
+const DEFAULT_VOICE = "Sohee";
 
 const DEFAULT_INSTRUCTIONS = [
   "You are a friendly voice assistant with a visible, human-like 3D avatar — the user",
