@@ -11,10 +11,11 @@ COPY . .
 
 ENV NODE_ENV=production
 ENV PORT=7860
-# Public session API of the source demo. Not a secret. To talk to a pool
-# directly instead, set LOAD_BALANCER_URL in the Space settings (a secret),
-# which takes precedence in index.ts.
-ENV SESSION_PROXY_URL=https://smolagents-hf-realtime-voice.hf.space/api
+# Point at a speech-to-speech backend by setting ONE of these in the Space
+# settings (index.ts prefers LOAD_BALANCER_URL):
+#   LOAD_BALANCER_URL  a load balancer's base URL (a secret) — talks to the pool directly
+#   SESSION_PROXY_URL  another deployment's /api to piggyback (e.g. a public demo Space)
+# With neither set, the app runs in direct mode (paste a ws:// URL in Settings).
 
 EXPOSE 7860
 
