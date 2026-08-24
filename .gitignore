@@ -6,6 +6,17 @@ out
 dist
 *.tgz
 
+# downloaded by the end-user launchers (no-install package)
+bin
+.venv
+
+# python bytecode
+__pycache__
+
+# Piper voice model: 114 MB exceeds GitHub's 100 MB limit.
+# The .onnx.json stays tracked; launchers fetch the model on first run.
+voices/*.onnx
+
 # code coverage
 coverage
 *.lcov

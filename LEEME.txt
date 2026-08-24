@@ -1,0 +1,27 @@
+E.V.A — GUÍA RÁPIDA (léame)
+============================
+
+FORMA DE USO: no necesita instalar nada a mano ni usar la terminal.
+
+1. Copie esta carpeta donde quiera tener E.V.A.
+2. Según su sistema, haga doble clic en:
+     - Windows :  Iniciar-EVA-WINDOWS.bat
+     - macOS   :  Iniciar-EVA-MAC.command  (si macOS avisa, acepte/permita el archivo
+                  una vez: clic derecho → Abrir)
+     - Linux   :  iniciar-eva-linux.sh     (o: bash iniciar-eva-linux.sh)
+3. La PRIMERA VEZ se descargan automáticamente el motor y la voz (~300 MB en
+   total). Las siguientes veces arranca en segundos.
+4. Se abrirá http://localhost:3000 en su navegador. PEGUE SU CLAVE de Gemini API
+   (gratis en https://aistudio.google.com/apikey) en el panel inferior derecho
+   y pulse "Verify". ¡Listo! Escriba o hable con E.V.A.
+
+DETENER:
+   - Windows : ejecute Cerrar-EVA-WINDOWS.bat
+   - macOS / Linux : cierre la ventana negra que abrió el lanzador.
+
+MICRÓFONO: funciona en http://localhost:3000 directamente. Si abre la página
+desde otra PC o del celular por IP (http://192.168.x.x), los navegadores bloquean
+el micrófono salvo que sea HTTPS.
+
+REQUISITOS: conexión a internet la primera vez; navegador moderno (Chrome,
+Edge, Firefox); en Windows 10/11 no hace falta nada más.

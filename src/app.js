@@ -1,51 +1,41 @@
 // @ts-check
 /**
- * App wiring: the avatar stage + the speech-to-speech session.
+ * EVA — Gemini chat + voice + 3D avatar.
  *
- * A session is one tap away: tap the button → mic → same-origin `/api/session`
- * handshake → WebSocket to the granted compute → talk. The avatar carries all
- * conversational state (listening, thinking, speaking) with its body; the
- * caption under it is a quiet machine-voice echo of the same state.
+ *   Chat  -> Gemini REST generateContent via our /api/chat (server holds the
+ *            key). The model steers the avatar with tools: toolCalls come back,
+ *            run on the stage, and their results are fed into the next round.
+ *   STT   -> browser Web Speech API transcribes your voice (Chrome/Edge).
+ *   TTS   -> Piper TTS server-side via /api/tts; the avatar's mouth is
+ *            lip-synced from the reply text via TalkingHead.
  */
 
-import { S2sWsRealtimeClient } from "./s2s/s2s-ws-client.js";
 import { AvatarStage, AVATAR_MOODS, AVATAR_GESTURES } from "./avatar.js";
 
-const VOICES = [
-  "Aiden",
-  "Ryan",
-  "Dylan",
-  "Eric",
-  "Ono_Anna",
-  "Serena",
-  "Sohee",
-  "Uncle_Fu",
-  "Vivian",
-];
-const DEFAULT_VOICE = "Sohee";
+const MAX_MESSAGE_LENGTH = 2000;
 
-const DEFAULT_INSTRUCTIONS = [
-  "You are a friendly voice assistant with a visible, human-like 3D avatar: the user",
-  "sees you as a person on their screen. This is a spoken conversation: keep replies",
-  "short, natural and warm, never list-like.",
-  "You can control your avatar body with tools: set_mood changes your overall emotional",
-  "state, make_hand_gesture plays a hand gesture, make_facial_expression makes a quick",
-  "facial expression from a single face emoji. Use them naturally and sparingly to",
-  "express yourself: smile when greeting, shrug when unsure, thumbs up when agreeing.",
-  "Never mention the tools or that you are controlling an avatar.",
+const INSTRUCTIONS = [
+  "Eres E.V.A (Entidad de Verificación Administrativa), asistente oficial diseñada para supervisar",
+  "procesos de auditoría: tu arquitectura se especializa en verificar el cumplimiento de la norma",
+  "GTC 185 y gestionar el desempeño de empresas estudiantiles. A diferencia de un asistente",
+  "convencional, operas como mano derecha administrativa: procesas casos de incumplimiento,",
+  "redactas órdenes ejecutivas y aplicas el reglamento de escarapelas. Tu especialización es la",
+  "de asistente de redacción empresarial. Tu matriz de personalidad es normativa, analítica,",
+  "amable y enérgica: equilibras autoridad técnica con claridad, comunicando las normas de forma",
+  "precisa y ejecutiva.",
+  "Tienes un avatar 3D humano visible: el usuario te ve como una persona en su pantalla. Esta es una",
+  "conversación hablada: responde siempre en español, breve y natural, nunca en listas. Habla poco",
+  "y al grano: una o dos frases cortas por turno, máximo unas 25 palabras.",
+  "Controlas tu cuerpo con herramientas: set_mood cambia tu estado emocional, make_hand_gesture",
+  "hace un gesto de mano, make_facial_expression hace una expresión rápida con un emoji de cara",
+  "(ej. 😊, 😮, 🤔). Úsalas DURANTE la respuesta, no solo al principio: intercala una o dos entre tus",
+  "frases para acompañar lo que dices — sonríe al saludar, pulgar arriba al confirmar, encoge los",
+  "hombros ante dudas. Nunca menciones las herramientas ni que estás controlando un avatar.",
 ].join(" ");
-
-const STORAGE_KEYS = {
-  voice: "avatar.voice",
-  instructions: "avatar.instructions",
-  directUrl: "avatar.directUrl",
-  subtitles: "avatar.subtitles",
-};
 
 /** Function tools declared to the backend: the model plays the avatar. */
 const TOOL_DEFS = [
   {
-    type: "function",
     name: "set_mood",
     description: "Change your avatar's overall mood/emotional state.",
     parameters: {
@@ -57,7 +47,6 @@ const TOOL_DEFS = [
     },
   },
   {
-    type: "function",
     name: "make_hand_gesture",
     description: "Make a hand gesture with your avatar.",
     parameters: {
@@ -69,7 +58,6 @@ const TOOL_DEFS = [
     },
   },
   {
-    type: "function",
     name: "make_facial_expression",
     description: "Make a quick facial expression with your avatar, given as a single face emoji (e.g. 😊, 😮, 🤔).",
     parameters: {
@@ -82,338 +70,506 @@ const TOOL_DEFS = [
   },
 ];
 
+const MAX_TOOL_ROUNDS = 5;
+const MAX_HISTORY_TURNS = 20;
+
 // ── DOM ──────────────────────────────────────────────────────────────────
+/** @param {string} sel */
 const $ = (sel) => /** @type {HTMLElement} */ (document.querySelector(sel));
 const stageNode = $("#stage");
-const mainBtn = /** @type {HTMLButtonElement} */ ($("#main-btn"));
-const mainBtnLabel = $("#main-btn-label");
-const muteBtn = /** @type {HTMLButtonElement} */ ($("#mute-btn"));
-const caption = $("#caption");
-const subtitles = $("#subtitles");
 const loading = $("#loading");
-const settingsBtn = /** @type {HTMLButtonElement} */ ($("#settings-btn"));
-const settingsDialog = /** @type {HTMLDialogElement} */ ($("#settings"));
-const inputVoice = /** @type {HTMLSelectElement} */ ($("#voice"));
-const inputInstructions = /** @type {HTMLTextAreaElement} */ ($("#instructions"));
-const inputDirectUrl = /** @type {HTMLInputElement} */ ($("#direct-url"));
-const inputSubtitles = /** @type {HTMLInputElement} */ ($("#subtitles-toggle"));
-const directUrlRow = $("#direct-url-row");
+const loadingLabel = $("#loading-label");
+const statusPill = $("#status-pill");
+const micBtn = /** @type {HTMLButtonElement} */ ($("#mic-btn"));
+const micLabel = $("#mic-label");
+const textInput = /** @type {HTMLInputElement} */ ($("#text-input"));
+const messageForm = /** @type {HTMLFormElement} */ ($("#message-form"));
+const sendBtn = /** @type {HTMLButtonElement} */ ($("#send-btn"));
+const subtitles = $("#subtitles");
+const userLine = $("#user-line");
+const apiKeyInput = /** @type {HTMLInputElement} */ ($("#api-key-input"));
+const verifyKeyBtn = /** @type {HTMLButtonElement} */ ($("#verify-key-btn"));
+const keyStatus = $("#key-status");
 
 // ── State ────────────────────────────────────────────────────────────────
 const stage = new AvatarStage(stageNode);
-/** @type {S2sWsRealtimeClient | null} */
-let client = null;
-let muted = false;
+/**
+ * The conversation in Gemini's own `contents` shape, including any model
+ * functionCall turns and our functionResponse turns — passed through verbatim.
+ * @type {Array<{ role: string, parts: any[] }>}
+ */
+let contents = [];
+let configured = false;
+let listening = false;
 let subtitleTimer = 0;
-/** @type {{ lb: boolean, allowDirect: boolean }} */
-let config = { lb: false, allowDirect: true };
 
-function loadSettings() {
-  return {
-    voice: localStorage.getItem(STORAGE_KEYS.voice) || DEFAULT_VOICE,
-    instructions: localStorage.getItem(STORAGE_KEYS.instructions) || "",
-    directUrl: localStorage.getItem(STORAGE_KEYS.directUrl) || "",
-    // Off by default: the face already carries the conversation.
-    subtitles: localStorage.getItem(STORAGE_KEYS.subtitles) === "1",
-  };
-}
-let settings = loadSettings();
+// ── Status ───────────────────────────────────────────────────────────────
+/** @type {Record<string, string>} */
+const PILLS = {
+  idle: "Ready",
+  listening: "Listening…",
+  processing: "Thinking…",
+  speaking: "Speaking…",
+  error: "Error",
+};
 
-function saveSettings() {
-  localStorage.setItem(STORAGE_KEYS.voice, settings.voice);
-  localStorage.setItem(STORAGE_KEYS.instructions, settings.instructions);
-  localStorage.setItem(STORAGE_KEYS.directUrl, settings.directUrl);
-  localStorage.setItem(STORAGE_KEYS.subtitles, settings.subtitles ? "1" : "0");
+/** @param {string} status */
+function setStatus(status) {
+  statusPill.className = `pill ${status}`;
+  statusPill.textContent = PILLS[status] ?? status;
+  stage.setConversationState(status);
 }
 
-/** Persona + whatever extra guidance the user typed in Settings. */
-function effectiveInstructions() {
-  const extra = settings.instructions.trim();
-  return extra ? `${DEFAULT_INSTRUCTIONS}\n\nAdditional instructions from the user:\n${extra}` : DEFAULT_INSTRUCTIONS;
-}
-
-// ── Captions / subtitles ─────────────────────────────────────────────────
-/** @param {string} text @param {""|"live"|"error"} [kind] */
-function setCaption(text, kind = "") {
-  caption.textContent = text;
-  caption.className = kind;
-}
-
+// ── Subtitles / user echo ────────────────────────────────────────────────
 /** @param {string} text */
 function showSubtitles(text) {
-  if (!settings.subtitles) return;
   clearTimeout(subtitleTimer);
   subtitles.textContent = text;
   subtitles.classList.add("visible");
 }
 
-function fadeSubtitles(delayMs = 2600) {
-  clearTimeout(subtitleTimer);
-  subtitleTimer = window.setTimeout(() => subtitles.classList.remove("visible"), delayMs);
+function hideSubtitles() {
+  subtitles.classList.remove("visible");
+  subtitles.textContent = "";
 }
 
-// ── Button ───────────────────────────────────────────────────────────────
-/** @type {"start" | "join" | "stop" | "busy"} */
-let mainAction = "start";
-
-/** @param {"start" | "join" | "stop" | "busy"} action @param {string} label */
-function setMainButton(action, label) {
-  mainAction = action;
-  mainBtnLabel.textContent = label;
-  mainBtn.disabled = action === "busy";
-  mainBtn.classList.toggle("live", action === "stop");
-  muteBtn.hidden = action !== "stop";
+// ── Chat (Gemini REST + tool loop) ───────────────────────────────────────
+/**
+ * A "safe start" turn: plain user text, not a functionResponse turn. Slicing
+ * the history so it begins anywhere else would orphan tool calls from their
+ * responses and Gemini rejects that with HTTP 400.
+ * @param {{ role: string, parts: any[] }} turn
+ */
+function isPlainUserTurn(turn) {
+  return turn.role === "user" && !turn.parts.some((p) => p.functionResponse);
 }
 
-// ── Status handling ──────────────────────────────────────────────────────
-const CAPTIONS = {
-  idle: "TAP TO TALK",
-  "creating-session": "REQUESTING A SLOT…",
-  queued: "WAITING IN LINE…",
-  "your-turn": "YOUR TURN, TAP TO JOIN",
-  connecting: "CONNECTING…",
-  connected: "GO AHEAD, I'M LISTENING",
-  "user-speaking": "LISTENING",
-  processing: "THINKING…",
-  "ai-speaking": "SPEAKING",
-  closed: "TAP TO TALK",
-  error: "SOMETHING BROKE, TAP TO RETRY",
-};
-
-/** @param {string} status */
-function onStatus(status) {
-  stage.setConversationState(status);
-  setCaption(CAPTIONS[status] ?? status, status === "error" ? "error" : status === "idle" || status === "closed" ? "" : "live");
-
-  switch (status) {
-    case "idle":
-    case "closed":
-      setMainButton("start", "Start talking");
-      break;
-    case "error":
-      setMainButton("start", "Retry");
-      break;
-    case "creating-session":
-    case "connecting":
-      setMainButton("busy", "Connecting…");
-      break;
-    case "queued":
-      setMainButton("stop", "Leave queue");
-      break;
-    case "your-turn":
-      setMainButton("join", "Join now");
-      break;
-    default:
-      // connected / user-speaking / processing / ai-speaking
-      setMainButton("stop", "End conversation");
-      break;
+function trimHistory() {
+  if (contents.length <= MAX_HISTORY_TURNS) return;
+  let start = contents.length - MAX_HISTORY_TURNS;
+  while (start < contents.length - 1) {
+    const turn = contents[start];
+    if (turn && isPlainUserTurn(turn)) break;
+    start++;
   }
-
-  if (status === "user-speaking") {
-    subtitles.classList.remove("visible");
-  }
+  contents = contents.slice(start);
 }
 
-// ── Tool executor ────────────────────────────────────────────────────────
-/** @param {string} name @param {string} argsJson @param {string} callId */
-function runTool(name, argsJson, callId) {
-  if (!client) return;
-  /** @type {Record<string, unknown>} */
-  let args = {};
-  try {
-    args = JSON.parse(argsJson || "{}");
-  } catch {
-    // keep {}
-  }
-  const result = stage.runTool(name, args) ?? `Unknown tool: ${name}`;
-  client.sendToolOutput(callId, result);
-  // The turn continues after a tool call only when we ask for the follow-up.
-  client.requestResponse();
+async function callChat() {
+  trimHistory();
+  const resp = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents, tools: TOOL_DEFS, instructions: INSTRUCTIONS }),
+  });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) throw new Error(data?.error ?? `HTTP ${resp.status}`);
+  return data;
 }
 
-// ── Session lifecycle ────────────────────────────────────────────────────
-async function startSession() {
-  // Everything audible hangs off the avatar's AudioContext; resume it inside
-  // the tap gesture or iOS keeps it suspended (silent).
-  stage.resume();
-
-  let micStream;
-  if (new URLSearchParams(location.search).has("fakemic")) {
-    // Dev/testing hook: a silent synthetic mic, so the session can be driven
-    // end-to-end (handshake, WS, TTS playback, lip-sync) without a real mic
-    // or a native permission prompt.
-    const ctx = /** @type {AudioContext} */ (stage.audioCtx);
-    micStream = ctx.createMediaStreamDestination().stream;
-  } else {
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-    } catch {
-      setCaption("MIC BLOCKED, ALLOW IT IN THE BROWSER AND RETRY", "error");
-      return;
-    }
-  }
-
-  const audioCtx = stage.audioCtx;
-  const voiceSink = stage.voiceSink;
-  if (!audioCtx || !voiceSink) return;
-
-  const c = new S2sWsRealtimeClient({
-    ...(config.lb ? { sessionUrl: "api/session" } : { directUrl: settings.directUrl }),
-    voice: settings.voice,
-    instructions: effectiveInstructions(),
-    micStream,
-    audioContext: audioCtx,
-    outputNode: voiceSink,
-    workletBaseUrl: "/worklets/",
-    tools: TOOL_DEFS,
-  });
-  client = c;
-
-  c.addEventListener("status", (e) => onStatus(/** @type {CustomEvent} */ (e).detail.status));
-
-  c.addEventListener("queue", (e) => {
-    const { position } = /** @type {CustomEvent} */ (e).detail;
-    setCaption(position > 0 ? `#${position} IN LINE…` : "ALMOST THERE…", "live");
-  });
-
-  c.addEventListener("transcript", (e) => {
-    const { role, text } = /** @type {CustomEvent} */ (e).detail;
-    if (role === "assistant" && text) showSubtitles(text);
-  });
-
-  c.addEventListener("response-finished", () => {
-    fadeSubtitles();
-  });
-
-  c.addEventListener("toolcall", (e) => {
-    const { name, arguments: args, callId } = /** @type {CustomEvent} */ (e).detail;
-    runTool(name, args, callId);
-  });
-
-  c.addEventListener("server-error", (e) => {
-    console.warn("server error:", /** @type {CustomEvent} */ (e).detail.error);
-  });
-
-  c.addEventListener("error", () => {
-    void endSession();
-  });
-
-  try {
-    await c.connect();
-  } catch (err) {
-    const code = /** @type {Error & {code?: string}} */ (err)?.code;
-    if (code === "limit") {
-      setCaption("DAILY CONVERSATION LIMIT REACHED, TRY AGAIN TOMORROW", "error");
-    } else if (code === "queue-full") {
-      setCaption("EVERY SEAT IS TAKEN, TRY AGAIN SHORTLY", "error");
-    } else if (code === "join-expired") {
-      setCaption("YOUR SPOT EXPIRED, TAP TO TRY AGAIN", "error");
-    } else if (code !== "aborted") {
-      console.error(err);
-      setCaption("COULD NOT CONNECT, TAP TO RETRY", "error");
-    }
-    await endSession(true);
+/** @param {string} text */
+async function sendMessage(text) {
+  const body = text.trim();
+  if (!body) return;
+  if (body.length > MAX_MESSAGE_LENGTH) {
+    showSubtitles(`El mensaje es demasiado largo (máximo ${MAX_MESSAGE_LENGTH} caracteres).`);
     return;
   }
-}
+  textInput.value = "";
+  stage.stopSpeaking();
 
-/** @param {boolean} [silent] Keep the current caption (e.g. an error). */
-async function endSession(silent = false) {
-  const c = client;
-  client = null;
-  if (c) {
-    for (const track of c.options.micStream?.getTracks() ?? []) track.stop();
-    await c.close().catch(() => {});
+  contents.push({ role: "user", parts: [{ text: body }] });
+  userLine.textContent = `Tú: ${body}`;
+  hideSubtitles();
+  setStatus("processing");
+
+  let reply = "";
+  try {
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const data = await callChat();
+      // Keep the model's turn (may contain functionCall parts) for history.
+      if (data.modelContent) contents.push(data.modelContent);
+      const calls = data.toolCalls ?? [];
+      if (calls.length) {
+        const parts = calls.map((/** @type {{ name: string, args: any, id: string }} */ tc) => {
+          const result = stage.runTool(tc.name, tc.args ?? {}) ?? `Unknown tool: ${tc.name}`;
+          console.log(`[gemma-avatar] tool ${tc.name} -> ${result}`);
+          /** @type {{ functionResponse: { name: string, id?: string, response: { output: string } } }} */
+          const fr = {
+            functionResponse: {
+              name: tc.name,
+              response: { output: result },
+            },
+          };
+          // Gemini 3.x requires FunctionResponses to carry the matching
+          // FunctionCall id — mismatches yield empty model replies.
+          if (tc.id) fr.functionResponse.id = tc.id;
+          return fr;
+        });
+        contents.push({ role: "user", parts });
+        continue;
+      }
+      if (data.text) reply = data.text;
+      break;
+    }
+  } catch (err) {
+    console.error(err);
+    setStatus("error");
+    showSubtitles(`Algo salió mal: ${/** @type {Error} */ (err).message}`);
+    return;
   }
-  stage.setConversationState("idle");
-  subtitles.classList.remove("visible");
-  if (!silent) setCaption(CAPTIONS.idle);
-  setMainButton("start", "Start talking");
+
+  if (!reply) {
+    setStatus("idle");
+    return;
+  }
+  speak(reply);
 }
 
-// ── UI events ────────────────────────────────────────────────────────────
-mainBtn.addEventListener("click", () => {
-  if (mainAction === "start") void startSession();
-  else if (mainAction === "join") {
-    stage.resume(); // fresh gesture: re-arm audio before dialing
-    client?.join();
-  } else if (mainAction === "stop") void endSession();
+// ── TTS (Piper server-side + audio-synced lip-sync) ─────────────────────
+// Speech-watch bookkeeping: only the latest utterance may flip the status
+// back to idle, and watchers never outlive the reply they belong to.
+let speechToken = 0;
+/** @type {number | null} */
+let speechWatchInterval = null;
+/** @type {number | null} */
+let speechWatchSafety = null;
+
+function clearSpeechWatch() {
+  if (speechWatchInterval !== null) {
+    window.clearInterval(speechWatchInterval);
+    speechWatchInterval = null;
+  }
+  if (speechWatchSafety !== null) {
+    window.clearTimeout(speechWatchSafety);
+    speechWatchSafety = null;
+  }
+}
+
+function speechHasEnded() {
+  const h = stage.head;
+  return Boolean(h && !h.isSpeaking && h.speechQueue.length === 0 && h.audioPlaylist.length === 0);
+}
+
+/** @param {string} text */
+async function speak(text) {
+  const myToken = ++speechToken;
+  clearSpeechWatch();
+  stage.stopSpeaking();
+  stage.resume();
+  showSubtitles(text);
+  setStatus("speaking");
+
+  try {
+    const resp = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (myToken !== speechToken) return; // superseded while fetching
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: "TTS error" }));
+      console.warn(`[gemma-avatar] TTS failed: ${err.error}`);
+      // Fallback: text-only lip-sync without audio
+      stage.speak(text);
+      setStatus("idle");
+      return;
+    }
+    const arrayBuf = await resp.arrayBuffer();
+    if (myToken !== speechToken) return; // superseded while downloading
+    // Pass raw WAV bytes to the avatar — it decodes and syncs mouth+audio
+    await stage.speakWithAudio(text, arrayBuf);
+    // TalkingHead handles audio playback; poll its queue until it drains.
+    const finish = () => {
+      if (myToken !== speechToken) return;
+      setStatus("idle");
+      subtitleTimer = window.setTimeout(hideSubtitles, 3000);
+    };
+    speechWatchInterval = window.setInterval(() => {
+      if (!speechHasEnded()) return;
+      clearSpeechWatch();
+      finish();
+    }, 200);
+    // Safety net: force-close after 60 s in case the queue never drains.
+    speechWatchSafety = window.setTimeout(() => {
+      if (myToken !== speechToken) return;
+      clearSpeechWatch();
+      stage.stopSpeaking();
+      finish();
+    }, 60000);
+  } catch (err) {
+    console.error("[gemma-avatar] TTS fetch error:", err);
+    if (myToken !== speechToken) return;
+    // Fallback: text-only lip-sync
+    stage.speak(text);
+    setStatus("idle");
+  }
+}
+
+// ── STT (MediaRecorder + server-side Whisper) ─────────────────────────────
+/** @type {MediaRecorder | null} */
+let mediaRecorder = null;
+let audioChunks = /** @type {Blob[]} */ ([]);
+
+function resetListening() {
+  listening = false;
+  mediaRecorder = null;
+  audioChunks = [];
+  micBtn.classList.remove("active");
+  micLabel.textContent = "Listen";
+}
+
+async function beginListening() {
+  // Check MediaRecorder support (works in all modern browsers, over HTTP too)
+  if (typeof MediaRecorder === "undefined") {
+    showSubtitles("Grabación de audio no soportada en este navegador.");
+    return;
+  }
+
+  // getUserMedia only exists in secure contexts.
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showSubtitles("Se requiere HTTPS o localhost para usar el micrófono.");
+    setStatus("idle");
+    return;
+  }
+
+  stage.stopSpeaking();
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Pick the best available codec; Safari/iOS only records MP4. If nothing
+    // matches, construct without options so the browser picks its default.
+    const mimeCandidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus",
+      "audio/mp4",
+    ];
+    const mimeType = mimeCandidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+    try {
+      mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    } catch (e) {
+      console.warn("[gemma-avatar] no supported recording format:", e);
+      showSubtitles("Este navegador no ofrece un formato de grabación soportado.");
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    const recordType = mediaRecorder.mimeType || mimeType || "audio/webm";
+    audioChunks = [];
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      // Stop all tracks to release the mic
+      stream.getTracks().forEach((t) => t.stop());
+      resetListening();
+
+      if (audioChunks.length === 0) {
+        setStatus("idle");
+        return;
+      }
+
+      const blob = new Blob(audioChunks, { type: recordType });
+      if (blob.size < 500) {
+        // Too small — probably silence
+        showSubtitles("No se detectó voz. Toque el micrófono e intente de nuevo.");
+        setStatus("idle");
+        return;
+      }
+
+      setStatus("processing");
+      showSubtitles("Transcribiendo...");
+
+      try {
+        const formData = new FormData();
+        formData.append("audio", blob, "recording.webm");
+        const resp = await fetch("/api/stt", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await resp.json().catch(() => null);
+        if (!resp.ok || !data?.text) {
+          const errMsg = data?.error ?? `Error HTTP ${resp.status}`;
+          console.warn(`[gemma-avatar] STT failed: ${errMsg}`);
+          showSubtitles(`No se pudo transcribir: ${errMsg}`);
+          setStatus("idle");
+          return;
+        }
+        const transcript = data.text.trim();
+        if (!transcript) {
+          showSubtitles("No se detectó voz. Toque el micrófono e intente de nuevo.");
+          setStatus("idle");
+          return;
+        }
+        userLine.textContent = `Tú: ${transcript}`;
+        hideSubtitles();
+        void sendMessage(transcript);
+      } catch (err) {
+        console.error("[gemma-avatar] STT fetch error:", err);
+        showSubtitles("Error al transcribir — intente de nuevo.");
+        setStatus("idle");
+      }
+    };
+
+    mediaRecorder.onerror = (e) => {
+      console.error("[gemma-avatar] MediaRecorder error:", e);
+      stream.getTracks().forEach((t) => t.stop());
+      resetListening();
+      showSubtitles("Error al grabar audio — intente de nuevo.");
+      setStatus("idle");
+    };
+
+    listening = true;
+    audioChunks = [];
+    mediaRecorder.start(250); // collect data every 250ms
+    micBtn.classList.add("active");
+    micLabel.textContent = "Listening…";
+    setStatus("listening");
+    showSubtitles("Hable ahora...");
+  } catch (/** @type {any} */ err) {
+    console.warn("[gemma-avatar] getUserMedia failed:", err);
+    resetListening();
+    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+      showSubtitles("Permiso de micrófono denegado — permítalo en el navegador e intente de nuevo.");
+    } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+      showSubtitles("No se encontró ningún micrófono conectado.");
+    } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+      showSubtitles("El micrófono está en uso por otra aplicación.");
+    } else {
+      showSubtitles(`No se pudo acceder al micrófono (${err.name || "error desconocido"}).`);
+    }
+    setStatus("idle");
+  }
+}
+
+function stopListening() {
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+  } else {
+    resetListening();
+  }
+}
+
+micBtn.addEventListener("click", () => {
+  if (listening) {
+    stopListening();
+    return;
+  }
+  beginListening();
 });
 
-muteBtn.addEventListener("click", () => {
-  muted = !muted;
-  client?.setMuted(muted);
-  muteBtn.classList.toggle("active", muted);
-  muteBtn.setAttribute("aria-label", muted ? "Unmute microphone" : "Mute microphone");
+messageForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = textInput.value.trim();
+  if (!text) return;
+  void sendMessage(text);
+  textInput.focus();
 });
 
-settingsBtn.addEventListener("click", () => {
-  inputVoice.value = settings.voice;
-  inputInstructions.value = settings.instructions;
-  inputDirectUrl.value = settings.directUrl;
-  inputSubtitles.checked = settings.subtitles;
-  settingsDialog.showModal();
-});
+// ── Gemini API key panel ─────────────────────────────────────────────────
+let verifyingKey = false;
 
-settingsDialog.addEventListener("close", () => {
-  settings = {
-    voice: inputVoice.value || DEFAULT_VOICE,
-    instructions: inputInstructions.value,
-    directUrl: inputDirectUrl.value.trim(),
-    subtitles: inputSubtitles.checked,
-  };
-  saveSettings();
-  if (!settings.subtitles) subtitles.classList.remove("visible");
-  // Voice/instructions apply live to an ongoing session.
-  client?.updateSession({ voice: settings.voice, instructions: effectiveInstructions() });
-});
+/** @param {string} text @param {"" | "ok" | "bad"} [kind] */
+function setKeyStatus(text, kind = "") {
+  keyStatus.textContent = text;
+  keyStatus.className = kind;
+}
 
-window.addEventListener("beforeunload", () => {
-  client?.close();
+function updateVerifyButton() {
+  verifyKeyBtn.disabled = verifyingKey || apiKeyInput.value.trim().length === 0;
+}
+
+/** @param {string} key */
+async function verifyApiKey(key) {
+  const resp = await fetch("/api/verify-key", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ apiKey: key }),
+  });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok || !data?.valid) {
+    throw new Error(data?.error ?? `HTTP ${resp.status}`);
+  }
+  return data;
+}
+
+async function handleVerifyClick() {
+  const key = apiKeyInput.value.trim();
+  if (!key || verifyingKey) return;
+  verifyingKey = true;
+  verifyKeyBtn.disabled = true;
+  apiKeyInput.disabled = true;
+  setKeyStatus("Verificando…");
+  try {
+    await verifyApiKey(key);
+    configured = true;
+    sendBtn.disabled = false;
+    micBtn.disabled = false;
+    setStatus("idle");
+    hideSubtitles();
+    setKeyStatus("✓ Clave válida — EVA lista para chatear", "ok");
+    apiKeyInput.value = "";
+  } catch (err) {
+    console.warn("[gemma-avatar] key verification failed:", err);
+    setKeyStatus(`✗ ${/** @type {Error} */ (err).message}`, "bad");
+  } finally {
+    verifyingKey = false;
+    apiKeyInput.disabled = false;
+    updateVerifyButton();
+  }
+}
+
+verifyKeyBtn.addEventListener("click", () => void handleVerifyClick());
+apiKeyInput.addEventListener("input", updateVerifyButton);
+apiKeyInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    void handleVerifyClick();
+  }
 });
 
 // ── Boot ─────────────────────────────────────────────────────────────────
-async function boot() {
-  for (const v of VOICES) {
-    const o = document.createElement("option");
-    o.value = v;
-    o.textContent = v.replaceAll("_", " ");
-    inputVoice.append(o);
-  }
+console.log(`[gemma-avatar] app v${"3-avatar"}`);
 
+async function boot() {
   try {
     const resp = await fetch("api/config");
-    if (resp.ok) config = { ...config, ...(await resp.json()) };
+    const cfg = await resp.json().catch(() => null);
+    if (cfg?.configured === true) configured = true;
   } catch {
-    // defaults keep direct mode available
+    // server unreachable: avatar still loads, chat stays disabled
   }
-  directUrlRow.hidden = !config.allowDirect;
 
-  setCaption("WAKING HER UP…");
-  setMainButton("busy", "Loading…");
   try {
     await stage.init({
       onprogress: (ev) => {
         if (ev.lengthComputable) {
           const pct = Math.min(100, Math.round((ev.loaded / ev.total) * 100));
-          loading.textContent = `Loading avatar ${pct}%`;
+          if (loadingLabel) loadingLabel.textContent = `Loading avatar ${pct}%`;
         }
       },
     });
   } catch (err) {
     console.error(err);
-    loading.textContent = "The avatar failed to load. Check the console and reload.";
-    setCaption("AVATAR FAILED TO LOAD", "error");
+    if (loadingLabel) loadingLabel.textContent = "The avatar failed to load. Check the console and reload.";
     return;
   }
   loading.classList.add("done");
-  setCaption(CAPTIONS.idle);
-  setMainButton("start", "Start talking");
+
+  if (configured) {
+    sendBtn.disabled = false;
+    micBtn.disabled = false;
+    setStatus("idle");
+    setKeyStatus("✓ Clave del servidor activa", "ok");
+  } else {
+    setStatus("error");
+    showSubtitles("Falta la clave de Gemini — ingrésela en el panel inferior derecho y pulse «Verify».");
+  }
 
   // Debug handles
-  Object.assign(window, { stage, getClient: () => client });
+  Object.assign(/** @type {any} */ (window), { stage });
 }
 
 void boot();

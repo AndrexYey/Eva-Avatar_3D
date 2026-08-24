@@ -1,25 +1,14 @@
-/*
- * Design language carried over from the source Space (see its DESIGN.md):
- * a precise cool-grey dark canvas, monochrome chrome, hairlines not boxes,
- * Inter for humans and Geist Mono for the machine voice. One difference:
- * there, color belonged to the orb — here, presence belongs to the avatar,
- * so the chrome stays even quieter.
- */
-
 :root {
-  --bg: #0a0b10;
-  --bg-elev: #13151c;
-  --bg-elev-2: #1b1e29;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --text: #f5f6fa;
-  --text-dim: rgba(245, 246, 250, 0.65);
-  --text-faint: rgba(245, 246, 250, 0.42);
-  --error: #ff6a75;
-  --live: #22d3ee;
-  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --radius-sm: 8px;
-  --radius-md: 14px;
+  --bg: #fff8f0;
+  --panel: rgba(255, 130, 50, 0.15);
+  --panel-2: #fff0e0;
+  --border: #ffcc99;
+  --text: #3d2000;
+  --muted: #b06020;
+  --accent: #ff6a00;
+  --accent-2: #ff8c38;
+  --error: #e63946;
+  --radius: 12px;
 }
 
 * {
@@ -28,71 +17,79 @@
 
 html,
 body {
-  height: 100%;
   margin: 0;
+  height: 100%;
 }
 
 body {
-  background: var(--bg);
+  background: linear-gradient(135deg, #fff8f0 0%, #ffe0b2 25%, #ffcc80 50%, #fff3e0 75%, #ffffff 100%);
+  background-size: 400% 400%;
+  animation: gradientShift 15s ease infinite;
   color: var(--text);
-  font-family: Inter, system-ui, -apple-system, sans-serif;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
   overflow: hidden;
 }
 
-#app {
-  position: relative;
-  height: 100dvh;
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
-/* ── The stage ──────────────────────────────────────────────────────── */
+/* ── 3D stage ───────────────────────────────────────────────────────── */
 
 #stage {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 0;
 }
 
-/* TalkingHead sizes the canvas itself (inline styles from its resize
-   observer) — don't fight it, just keep it block-level. */
 #stage canvas {
   display: block;
-}
-
-[hidden] {
-  display: none !important;
+  width: 100%;
+  height: 100%;
 }
 
 #loading {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 5;
   display: grid;
   place-items: center;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  background: var(--bg);
-  transition: opacity 0.6s ease;
-  pointer-events: none;
+  background: linear-gradient(135deg, #fff8f0 0%, #ffe0b2 25%, #ffcc80 50%, #fff3e0 75%, #ffffff 100%);
+  transition: opacity 0.4s ease;
 }
 
 #loading.done {
   opacity: 0;
+  pointer-events: none;
 }
 
-/* ── Topbar ─────────────────────────────────────────────────────────── */
+#loading-label {
+  font-family: "Geist Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+/* ── Top bar ────────────────────────────────────────────────────────── */
 
 #topbar {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
+  z-index: 10;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  padding: 18px 20px;
+  gap: 16px;
+  padding: 18px 22px;
   pointer-events: none;
+  background: linear-gradient(to bottom, rgba(255, 248, 240, 0.85), transparent);
 }
 
 #topbar > * {
@@ -101,259 +98,291 @@ body {
 
 #identity h1 {
   margin: 0;
-  font-size: 15px;
+  font-size: 20px;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 2px;
 }
 
 #identity p {
-  margin: 4px 0 0;
-  max-width: 340px;
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pill {
+  font-family: "Geist Mono", monospace;
   font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-faint);
-}
-
-#identity strong {
-  color: var(--text-dim);
-  font-weight: 500;
-}
-
-/* ── Buttons ────────────────────────────────────────────────────────── */
-
-.icon-btn {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elev);
-  color: var(--text-dim);
-  cursor: pointer;
-  touch-action: manipulation;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--muted);
+  white-space: nowrap;
 }
 
-.icon-btn:hover {
-  color: var(--text);
-  border-color: var(--border-strong);
+.pill.idle,
+.pill.listening,
+.pill.speaking,
+.pill.processing {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
-.icon-btn.active {
+.pill.error {
   color: var(--error);
-  border-color: var(--border-strong);
+  border-color: var(--error);
 }
 
-#main-btn {
-  min-width: 190px;
-  height: 46px;
-  padding: 0 26px;
-  border: none;
-  border-radius: 23px;
-  background: var(--text);
-  color: var(--bg);
-  font-family: Inter, system-ui, sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  touch-action: manipulation;
-  transition: transform 0.12s ease, opacity 0.15s ease;
+/* ── Speech overlays ────────────────────────────────────────────────── */
+
+#user-line {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 132px;
+  z-index: 10;
+  max-width: min(680px, calc(100vw - 40px));
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+  pointer-events: none;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.8);
 }
-
-#main-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-#main-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-#main-btn.live {
-  background: var(--bg-elev);
-  color: var(--text);
-  border: 1px solid var(--border-strong);
-}
-
-/* ── Controls / caption ─────────────────────────────────────────────── */
-
-#controls {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  padding: 0 20px calc(22px + env(safe-area-inset-bottom));
-}
-
-#buttons {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-#caption {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  transition: color 0.2s ease;
-}
-
-#caption.live {
-  color: var(--live);
-}
-
-#caption.error {
-  color: var(--error);
-}
-
-/* ── Subtitles ──────────────────────────────────────────────────────── */
 
 #subtitles {
-  position: absolute;
+  position: fixed;
   left: 50%;
-  bottom: 118px;
   transform: translateX(-50%);
-  max-width: min(640px, calc(100vw - 48px));
-  padding: 10px 16px;
-  border-radius: var(--radius-md);
-  background: rgba(10, 11, 16, 0.72);
-  backdrop-filter: blur(6px);
-  border: 1px solid var(--border);
-  font-size: 15px;
-  line-height: 1.5;
+  bottom: 168px;
+  z-index: 10;
+  max-width: min(720px, calc(100vw - 40px));
   text-align: center;
-  text-wrap: balance;
-  color: var(--text);
-  opacity: 0;
-  transition: opacity 0.25s ease;
+  font-size: 21px;
+  font-weight: 600;
+  color: #3d2000;
   pointer-events: none;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  text-shadow: 0 1px 6px rgba(255, 255, 255, 0.9);
 }
 
 #subtitles.visible {
   opacity: 1;
 }
 
-/* ── Settings dialog ────────────────────────────────────────────────── */
+/* ── Controls ───────────────────────────────────────────────────────── */
 
-#settings {
-  width: min(440px, calc(100vw - 40px));
-  padding: 22px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  background: var(--bg-elev);
-  color: var(--text);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.32);
+#controls {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 28px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(680px, calc(100vw - 32px));
 }
 
-#settings::backdrop {
-  background: rgba(5, 6, 9, 0.6);
-  backdrop-filter: blur(2px);
-}
-
-#settings h2 {
-  margin: 0 0 16px;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-#settings label {
-  display: block;
-  margin-bottom: 14px;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-#settings select,
-#settings textarea,
-#settings input {
-  display: block;
+#mic-container {
   width: 100%;
-  margin-top: 6px;
-  padding: 9px 11px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elev-2);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 13px;
+  display: flex;
+  justify-content: center;
 }
 
-#settings select:focus-visible,
-#settings textarea:focus-visible,
-#settings input:focus-visible {
-  outline: 1px solid var(--text-dim);
-  outline-offset: 1px;
-}
-
-#settings textarea {
-  resize: vertical;
-}
-
-#settings .check-row {
+#mic-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  padding: 0;
   display: flex;
   align-items: center;
-  gap: 9px;
+  justify-content: center;
+  font-size: 22px;
+  border: 2px solid var(--accent);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--accent);
 }
 
-#settings .check-row input {
-  display: inline-block;
-  width: auto;
-  margin: 0;
-  accent-color: var(--text);
+#mic-btn::before {
+  content: "🎙️";
+  font-size: 22px;
+  line-height: 1;
 }
 
-.dialog-actions {
+#mic-btn.active::before {
+  content: "⏹️";
+}
+
+#mic-btn.active {
+  background: linear-gradient(135deg, #ff6a00, #ff8c38);
+  border-color: #ff6a00;
+  color: #fff;
+  animation: pulse 1.5s ease infinite;
+}
+
+#mic-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  animation: none;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 106, 0, 0.4); }
+  50% { box-shadow: 0 0 0 12px rgba(255, 106, 0, 0); }
+}
+
+#message-form {
+  flex: 1;
   display: flex;
-  justify-content: flex-end;
-  margin-top: 6px;
+  gap: 10px;
 }
 
-.dialog-actions .primary {
-  padding: 9px 20px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--text);
-  color: var(--bg);
-  font-weight: 600;
-  font-size: 13px;
+#text-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+#text-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 106, 0, 0.2);
+}
+
+#text-input::placeholder {
+  color: var(--muted);
+}
+
+button {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text);
+  padding: 12px 18px;
   cursor: pointer;
+  transition: filter 0.12s ease, opacity 0.12s ease;
 }
 
-/* ── Focus + motion floors ──────────────────────────────────────────── */
-
-button:focus-visible {
-  outline: 2px solid var(--text-dim);
-  outline-offset: 2px;
+button:hover:not(:disabled) {
+  filter: brightness(1.15);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  * {
-    transition-duration: 0.01ms !important;
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: linear-gradient(135deg, #ff6a00, #ff8c38);
+  border-color: #ff6a00;
+  color: #fff;
+}
+
+#mic-label {
+  display: none;
+}
+
+/* ── Gemini API key panel (lower right) ─────────────────────────────── */
+
+#key-panel {
+  position: fixed;
+  right: 22px;
+  bottom: 28px;
+  z-index: 9; /* below subtitles/user-line so captions stay on top */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 300px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(6px);
+}
+
+#key-panel label {
+  font-family: "Geist Mono", monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.key-row {
+  display: flex;
+  gap: 8px;
+}
+
+#api-key-input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  color: var(--text);
+  font-family: "Geist Mono", monospace;
+  font-size: 12px;
+  outline: none;
+}
+
+#api-key-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 106, 0, 0.2);
+}
+
+#verify-key-btn {
+  padding: 9px 14px;
+  white-space: nowrap;
+}
+
+#key-status {
+  margin: 0;
+  min-height: 18px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+#key-status.ok {
+  color: #2e7d32;
+}
+
+#key-status.bad {
+  color: var(--error);
+}
+
+/* Keep clear of the centered controls once they could overlap. */
+@media (max-width: 1380px) {
+  #key-panel {
+    bottom: 156px;
+    width: 280px;
   }
 }
 
-/* ── Phones ─────────────────────────────────────────────────────────── */
-
-@media (max-width: 600px) {
-  #identity p {
-    display: none;
-  }
-
-  #subtitles {
-    bottom: 128px;
-    font-size: 14px;
+@media (max-width: 560px) {
+  #key-panel {
+    left: 16px;
+    right: 16px;
+    bottom: 156px;
+    width: auto;
+    padding: 10px;
   }
 }

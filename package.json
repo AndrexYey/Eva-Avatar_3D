@@ -4,13 +4,15 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun --hot ./index.ts",
-    "start": "bun ./index.ts"
+    "tts": "python3 tts_server.py",
+    "dev": "sh -c 'kill $(lsof -t -i:5000 -i:3000) 2>/dev/null; sleep 0.5; python3 tts_server.py & TTS_PID=$!; cleanup() { kill $TTS_PID 2>/dev/null; }; trap cleanup INT TERM EXIT; bun --hot ./index.ts'",
+    "dev:stop": "kill $(lsof -t -i:5000 -i:3000) 2>/dev/null || true",
+    "start": "sh -c 'kill $(lsof -t -i:5000 -i:3000) 2>/dev/null; sleep 0.5; python3 tts_server.py & TTS_PID=$!; cleanup() { kill $TTS_PID 2>/dev/null; }; trap cleanup INT TERM EXIT; bun ./index.ts'",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
   },
   "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
+    "@types/bun": "latest",
     "typescript": "^5"
   },
   "dependencies": {

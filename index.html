@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Gemma Avatar</title>
+    <title>EVA — 3D Avatar Assistant</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -13,81 +13,61 @@
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
-    <main id="app">
-      <!-- The avatar is the hero: a full-viewport 3D stage. -->
-      <div id="stage" aria-label="3D avatar"></div>
-      <div id="loading">Loading avatar…</div>
+    <!-- The avatar is the hero: a full-viewport 3D stage. -->
+    <div id="stage" aria-label="EVA, 3D avatar"></div>
+    <div id="loading">
+      <div id="loading-label">Cargando avatar…</div>
+    </div>
 
-      <header id="topbar">
-        <div id="identity">
-          <h1>Gemma&nbsp;Avatar</h1>
-          <p>
-            Talk to <strong>Gemma&nbsp;4</strong> face to face. parakeet&nbsp;STT ·
-            Cerebras&nbsp;inference · Qwen3&nbsp;TTS · TalkingHead&nbsp;3D
-          </p>
-        </div>
-        <button id="settings-btn" class="icon-btn" aria-label="Settings" title="Settings">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
+    <header id="topbar">
+      <div id="identity">
+        <h1>E.V.A</h1>
+        <p>Entidad de Verificación Administrativa · GTC 185</p>
+      </div>
+      <div class="topbar-right">
+        <span id="status-pill" class="pill idle" aria-live="polite">Ready</span>
+      </div>
+    </header>
+
+    <!-- What she's saying, as it's spoken. -->
+    <div id="user-line" aria-live="polite"></div>
+    <div id="subtitles" aria-live="polite"></div>
+
+    <footer id="controls">
+      <div id="mic-container">
+        <button id="mic-btn" disabled>
+          <span id="mic-label">Listen</span>
         </button>
-      </header>
+      </div>
+      <form id="message-form">
+        <input
+          id="text-input"
+          type="text"
+          placeholder="Escribe un mensaje…"
+          autocomplete="off"
+          aria-label="Message"
+        />
+        <button id="send-btn" type="submit" class="primary" disabled>Send</button>
+      </form>
+    </footer>
 
-      <!-- What she's saying, as it's spoken. -->
-      <div id="subtitles" aria-live="polite"></div>
+    <!-- Gemini API key setup, pinned to the lower right corner. -->
+    <aside id="key-panel" aria-label="Configuración de la clave de Gemini">
+      <label for="api-key-input">Gemini API Key</label>
+      <div class="key-row">
+        <input
+          id="api-key-input"
+          type="password"
+          placeholder="Pega tu clave aquí…"
+          autocomplete="off"
+          spellcheck="false"
+          aria-describedby="key-status"
+        />
+        <button id="verify-key-btn" type="button" disabled>Verify</button>
+      </div>
+      <p id="key-status" role="status"></p>
+    </aside>
 
-      <footer id="controls">
-        <div id="caption">LOADING…</div>
-        <div id="buttons">
-          <button id="main-btn" disabled>
-            <span id="main-btn-label">Loading…</span>
-          </button>
-          <button id="mute-btn" class="icon-btn" hidden aria-label="Mute microphone" title="Mute microphone">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-              <line x1="12" y1="19" x2="12" y2="23"></line>
-              <line x1="8" y1="23" x2="16" y2="23"></line>
-            </svg>
-          </button>
-        </div>
-      </footer>
-
-      <dialog id="settings">
-        <form method="dialog">
-          <h2>Settings</h2>
-          <label>
-            Voice
-            <select id="voice"></select>
-          </label>
-          <label class="check-row">
-            <input type="checkbox" id="subtitles-toggle" />
-            Show subtitles while she speaks
-          </label>
-          <label>
-            Extra instructions
-            <textarea
-              id="instructions"
-              rows="4"
-              placeholder="Anything you want her to know or do (persona stays)."
-            ></textarea>
-          </label>
-          <label id="direct-url-row" hidden>
-            Direct server URL
-            <input
-              id="direct-url"
-              type="url"
-              placeholder="ws://localhost:8080/v1/realtime"
-              spellcheck="false"
-            />
-          </label>
-          <div class="dialog-actions">
-            <button value="close" class="primary">Done</button>
-          </div>
-        </form>
-      </dialog>
-    </main>
     <script type="module" src="./src/app.js"></script>
   </body>
 </html>
