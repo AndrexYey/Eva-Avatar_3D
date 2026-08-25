@@ -116,18 +116,29 @@ REM ── 3. Python + voz local ───────────────�
 echo [3/4] Preparando voz local ^(Piper^)...
 echo [3/4] Preparando Python y Piper... >> "%LOG%"
 set "PY="
+REM Intentar py launcher primero (mas fiable que 'python')
 where py >nul 2>nul
 if !errorlevel! equ 0 (
-  set "PY=py -3"
-  echo   Python encontrado via 'py -3'
-  echo   Python encontrado via py -3 >> "%LOG%"
+  py -3 --version >nul 2>nul
+  if !errorlevel! equ 0 (
+    set "PY=py -3"
+    echo   Python encontrado via 'py -3'
+    echo   Python encontrado via py -3 >> "%LOG%"
+  )
 )
+REM Intentar 'python' — verificar que no sea el stub del Microsoft Store
 if not defined PY (
   where python >nul 2>nul
   if !errorlevel! equ 0 (
-    set "PY=python"
-    echo   Python encontrado via 'python'
-    echo   Python encontrado via python >> "%LOG%"
+    python --version >nul 2>nul
+    if !errorlevel! equ 0 (
+      set "PY=python"
+      echo   Python encontrado via 'python'
+      echo   Python encontrado via python >> "%LOG%"
+    ) else (
+      echo   AVISO: se encontro 'python' pero no responde ^(probablemente es el stub de Microsoft Store^).
+      echo   AVISO: python stub de Store detectado >> "%LOG%"
+    )
   )
 )
 if not defined PY (
@@ -168,18 +179,30 @@ if not defined PY (
   echo   Python instalado via winget. Verificando...
   echo   Python instalado via winget >> "%LOG%"
   where py >nul 2>nul
-  if !errorlevel! equ 0 set "PY=py -3"
+  if !errorlevel! equ 0 (
+    py -3 --version >nul 2>nul
+    if !errorlevel! equ 0 set "PY=py -3"
+  )
   if not defined PY (
     where python >nul 2>nul
-    if !errorlevel! equ 0 set "PY=python"
+    if !errorlevel! equ 0 (
+      python --version >nul 2>nul
+      if !errorlevel! equ 0 set "PY=python"
+    )
   )
 )
 if not defined PY (
   echo.
-  echo   ERROR: Python no se encuentra en el PATH.
-  echo   Es posible que necesite reiniciar la PC despues de instalar Python.
+  echo   ERROR: No se encontro un Python funcional en el sistema.
   echo.
-  echo   ERROR: Python no encontrado en PATH >> "%LOG%"
+  echo   Si 'python' existe pero no funciona, es probablemente el stub de Microsoft Store.
+  echo   Solucion: desinstalelo desde Configuracion ^> Aplicaciones ^> "Python"
+  echo   e instale Python real desde https://www.python.org/downloads/
+  echo.
+  echo   IMPORTANTE: Marque "Add Python to PATH" durante la instalacion.
+  echo   Despues de instalar, reinicie la PC y vuelva a ejecutar este archivo.
+  echo.
+  echo   ERROR: Python no encontrado funcional >> "%LOG%"
   pause
   exit /b 1
 )
